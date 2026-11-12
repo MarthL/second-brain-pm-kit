@@ -120,18 +120,24 @@ def keys(n):
     t = re.sub(r"\(.*?\)", "", n["title"]).strip()
     if n["kind"] == "person":
         return [t.split()[0]]
+    # the name is what comes before a colon ("Atlas: T&M"), and a slash separates its other names ("Northwind / NW")
+    names = [p.strip() for p in t.split(":")[0].split(" / ") if p.strip()] or [t]
     # a project is also called by its first word ("Atlas" for Atlas by Northwind), when that word is a name
-    return [t] + ([t.split()[0]] if len(t.split()[0]) > 3 and n["kind"] in ("project", "company") else [])
+    first = names[0].split()[0]
+    return names + ([first] if len(first) > 3 and first != names[0] and n["kind"] in ("project", "company") else [])
 
 
 for n in nodes.values():
     if n["kind"] == "you":
         continue
-    ks = [k.lower() for k in keys(n) if len(k) > 2]
+    # the full name matches in any case; the short first-word name only as a capitalized name, so
+    # "Base" for Base Camp does not catch "base layer"
+    ks = [k for k in keys(n) if len(k) > 2]
+    pats = [re.compile(r"\b" + re.escape(k) + r"\b", 0 if i and n["kind"] != "person" else re.I) for i, k in enumerate(ks)]
     mine, theirs = [], []
     for r in rows:
-        hay = f"{r['owes']} {r['to']} {r['what']}".lower()
-        if n["id"] not in r["links"] and not any(re.search(r"\b" + re.escape(k) + r"\b", hay) for k in ks):
+        hay = f"{r['owes']} {r['to']} {r['what']}"
+        if n["id"] not in r["links"] and not any(p.search(hay) for p in pats):
             continue
         # only what is between you and them: someone's task for themselves is theirs, not yours
         if is_me(r["owes"]):
@@ -214,11 +220,17 @@ day["agenda"] = None
 since = (today - dt.timedelta(days=1)).isoformat()
 groups = {}
 for r in rows:
-    if r["opened"] < since or r["kept"]:
+    # a Jira ask stays in the review until you check it, however old; the rest only since yesterday
+    asked = r["state"] == "open" and "atlassian.net/browse/" in r["src"]
+    if r["kept"] or (r["opened"] < since and not asked):
         continue
     m = re.search(r"(meeting-\d{4}-\d{2}-\d{2}[a-z0-9-]*)", r["src"])
     ch = re.search(r"\[(#[^\]]+?)(?:\s+\d{1,2}\s+\w{3}.*?)?\]\((https?://[^)]+)\)", r["src"]) or re.search(r"(#[a-z0-9_-]+)", r["src"])
-    if m:
+    jira = re.search(r"atlassian\.net/browse/([A-Z][A-Z0-9]+-\d+)", r["src"])
+    if jira and not m:
+        # asked of you in a Jira comment (prompts/watch.md): one group, the issue links in the rows
+        g = groups.setdefault("jira", {"key": "jira", "title": "Asked of you in Jira", "file": "", "url": "", "rows": []})
+    elif m:
         key = m.group(1)
         f = os.path.join(SB, "archive", key + ".md")
         title = (re.search(r"^# (.+)$", open(f, errors="replace").read(800), re.M) or [None, key])[1].strip() if os.path.exists(f) else key
@@ -237,7 +249,7 @@ for r in rows:
         g = groups.setdefault(d + kind, {"key": d + kind, "title": f"{kind.capitalize()} notes, {int(d[8:])} {MONTHS[int(d[5:7]) - 1].capitalize()}", "file": f, "url": "", "rows": []})
     else:
         g = groups.setdefault("other", {"key": "other", "title": "From your notes", "file": "", "url": "", "rows": []})
-    g["rows"].append({k: r[k] for k in ("id", "opened", "owes", "to", "what", "due", "state")})
+    g["rows"].append({k: r[k] for k in ("id", "opened", "owes", "to", "what", "due", "state", "src", "desc")})
 review_rows = sorted(groups.values(), key=lambda g: (max(x["opened"] for x in g["rows"]), len(g["rows"])), reverse=True)
 pages = defaultdict(list)
 cur = None

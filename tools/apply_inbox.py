@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""data/inbox.jsonl (written by Brain Home: done, keep, drop, still on, a new task) -> commitments.md. Then empties the file."""
+"""data/inbox.jsonl (written by Brain Home: done, keep, drop, still on, a new task, a new name) -> commitments.md. Then empties the file."""
 import json, os, re, sys, subprocess, datetime
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 P = os.path.join(R, "data", "inbox.jsonl")
@@ -9,7 +9,7 @@ if not lines: raise SystemExit("inbox empty")
 today = datetime.date.today().isoformat()
 cm = open(os.path.join(R, "commitments.md")).read()
 raw_path = os.path.join(R, "raw", f"{today}.md")
-done = reopened = thoughts = kept = dropped = moved = fortunes = added = deleted = 0
+done = reopened = thoughts = kept = dropped = moved = fortunes = added = deleted = renamed = 0
 cell = lambda v: re.sub(r"\s+", " ", (v or "").replace("|", "/")).strip()
 PAGE = re.compile(r"(wiki/[a-z0-9-]+\.md|projects/[a-z0-9-]+/README\.md)")
 def page_title(rel):
@@ -76,6 +76,28 @@ for l in lines:
     elif t == "watch" and e.get("text", "").strip():
         subprocess.run([sys.executable, os.path.join(R, "tools", "fortune.py"), "watch", e.get("op", "add"), e["text"].strip()], capture_output=True)
         fortunes += 1
+    # a new name for a project or a person, from Brain Home's card: the page's "# " heading and its
+    # line in wiki/index.md; the file name stays, so every link keeps working
+    elif t == "rename" and PAGE.fullmatch(e.get("file", "")) and cell(e.get("title")):
+        rel, title = e["file"], cell(e["title"])
+        path = os.path.join(R, rel)
+        try: text = open(path).read()
+        except OSError: continue
+        if re.search(r"^# .+$", text, re.M): text = re.sub(r"^# .+$", lambda _: f"# {title}", text, count=1, flags=re.M)
+        else:
+            fm = re.match(r"^---\n.*?\n---\n", text, re.S)
+            at = fm.end() if fm else 0
+            text = text[:at] + f"\n# {title}\n" + text[at:]
+        open(path, "w").write(text)
+        touched = [rel]
+        idx = os.path.join(R, "wiki", "index.md")
+        if os.path.exists(idx):
+            target = rel[len("wiki/"):] if rel.startswith("wiki/") else "../" + rel
+            s = open(idx).read()
+            t2 = re.sub(r"\[[^\]]*\]\(" + re.escape(target) + r"\)", lambda _: f"[{title}]({target})", s)
+            if t2 != s: open(idx, "w").write(t2); touched.append("wiki/index.md")
+        subprocess.run(["git", "-C", R, "add", "--", *touched], capture_output=True)
+        renamed += 1
     elif t in ("brain", "answer"):
         text = e.get("text", "").strip()
         if t == "answer": text = f"answer to the brief question: {e.get('q','').strip()}\n{text}"
@@ -87,4 +109,4 @@ for l in lines:
         thoughts += 1
 open(os.path.join(R, "commitments.md"), "w").write(cm)
 open(P, "w").write("")
-print(f"inbox: {added} added, {done} done, {reopened} reopened, {kept} kept, {dropped} dropped, {moved} moved, {thoughts} thoughts, {fortunes} fortune, {deleted} deleted")
+print(f"inbox: {added} added, {done} done, {reopened} reopened, {kept} kept, {dropped} dropped, {moved} moved, {thoughts} thoughts, {fortunes} fortune, {deleted} deleted, {renamed} renamed")

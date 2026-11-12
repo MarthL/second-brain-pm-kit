@@ -275,6 +275,14 @@
   /* review */
   .lede { margin: 2px 6px 0; font: 400 14px/20px system-ui; color: var(--ink2); }
   .lede b { color: var(--ink); font-weight: 600; }
+  .grp .it[data-id] { cursor: pointer; }
+  .grp .more { display: none; margin-top: 6px; font-size: 12.5px; line-height: 18px; color: var(--ink2); }
+  .grp .it.open .more { display: block; }
+  .grp .it.open .what { display: block; -webkit-line-clamp: unset; overflow: visible; }
+  .grp .more .desc { display: block; -webkit-line-clamp: unset; white-space: pre-line; }
+  .grp .more .from { margin-top: 4px; overflow-wrap: anywhere; }
+  .grp .more .from a, .grp .more .open a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+  .grp .more .open { margin-top: 4px; }
   .grp { margin-top: 12px; overflow: hidden; transition: opacity 0.25s ease, max-height 0.4s var(--ease), margin 0.4s var(--ease); }
   .grp.gone { opacity: 0; max-height: 0 !important; margin-top: 0; }
   .ghead { display: flex; align-items: center; gap: 8px; padding: 11px 10px 9px 12px; }
@@ -378,7 +386,13 @@
   .qc .pic.thing { border-radius: 30%; display: grid; place-items: center; font: 650 15px system-ui; color: rgba(25,25,30,0.72); }
   .qc .pic.sil::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 38%, rgba(30,30,40,.32) 0 18%, transparent 19%), radial-gradient(ellipse 34% 28% at 50% 100%, rgba(30,30,40,.32) 0 99%, transparent 100%); }
   .qc .qn { flex: 1; min-width: 0; }
-  .qc .qn b { display: block; font: 600 15px/19px system-ui; }
+  .qc .qn b { display: inline; font: 600 15px/19px system-ui; }
+  .qc .qn .nt { cursor: text; border-radius: 4px; outline: none; }
+  .qc .qn .nt:hover { background: rgba(127,127,127,.12); }
+  .qc .qn .nt.editing { background: rgba(127,127,127,.18); box-shadow: 0 0 0 2px rgba(127,127,127,.35); padding: 0 3px; }
+  .qc .qn .ren { margin-left: 6px; padding: 2px; border: 0; background: none; color: inherit; opacity: .45; cursor: pointer; vertical-align: 1px; }
+  .qc .qn .ren:hover { opacity: 1; }
+  .qc .qn span { display: block; }
   .qc .qn span { font-size: 12px; color: var(--ink2); }
   .qc .od { flex: none; padding: 3px 8px; border-radius: 9px; background: var(--pinkBg); color: var(--pink); font: 600 11.5px system-ui; }
   .qc .x { flex: none; width: 26px; height: 26px; border: 0; border-radius: 13px; background: var(--chip); color: var(--ink2); cursor: pointer; }
@@ -959,6 +973,21 @@
     return `<div class="sec"><h3>Due ${WD[d.getDay()]} ${d.getDate()}</h3><span class="sub">${due.length ? `${due.length} task${due.length === 1 ? '' : 's'}` : 'nothing due'}</span></div>
       ${due.length ? `<div class="box ft">${due.map(row).join('')}</div>` : ''}`
   }
+  // a count picked: its rows replace the Needs you list, every one of them, also those about
+  // someone with no page on the map
+  let cntSel = null
+  const cntRows = (k) => Object.values(B.tasks || {}).filter((t) => t.state !== 'done' && !SW.some((x) => x.id === t.id && x.gone)
+    && (k === 'theirs' ? !isMe(t.owes) && isMe(t.to) && t.state === 'overdue' : isMe(t.owes) && t.state === k))
+    .sort((a, b) => (a.due || '9').localeCompare(b.due || '9'))
+  function cntList(k) {
+    const list = cntRows(k), c = COUNTS.find((x) => x[0] === k)
+    const row = (r) => `<div class="it" data-id="${r.id}"><button class="ck" data-done="${r.id}" aria-label="Done: ${esc(r.what)}">${ckSvg}</button>
+        <div class="w"><a class="what" href="${taskHref(r)}" title="Open the task">${esc(r.what)}</a>
+        <div class="meta"><span>${isMe(r.owes) ? `You owe ${esc(r.to)}` : `${esc(r.owes)} owes you`}</span>${dueChip(rowById(r.id) || r)}</div></div></div>`
+    return `<div class="sec"><h3>${c[5][0].toUpperCase() + c[5].slice(1)}</h3><span class="sub">${list.length ? `${list.length}, oldest first` : 'nothing'}</span></div>
+      ${list.length ? `<div class="box ft">${list.map(row).join('')}</div>` : ''}
+      <button class="more" id="cntback">Back to Needs you</button>`
+  }
   function renderToday() {
     const dictTotal = DY.dictations.reduce((a, b) => a + b, 0), askTotal = DY.asks.reduce((a, b) => a + b, 0)
     const peak = Math.max(1, ...DY.dictations)
@@ -977,8 +1006,8 @@
         return `<button class="wk${iso(d) === B.today ? ' today' : ''}" data-i="${i}" aria-pressed="${i === wkSel}" title="${esc([wkMeets[i].map((m) => (m.start ? m.start + ' ' : '') + m.title).join('\n') || 'no calls', due.length ? `${due.length} task${due.length === 1 ? '' : 's'} due` : ''].filter(Boolean).join('\n'))}"><div class="l">${WD[d.getDay()].slice(0, 2)} ${d.getDate()}</div>
         <div class="bars${wkMeets[i].length ? '' : ' none'}">${wkMeets[i].slice(0, 5).map(() => '<i></i>').join('')}</div><div class="due${due.length ? '' : ' none'}">${due.length || ''}</div></button>` }).join('')}</div>
       ${wkSel >= 0 ? wkDay(wkSel) : ''}
-      <div class="counts" id="counts">${shown.map(([k, n, t, cls, , long]) => `<button class="count ${cls}" data-k="${k}" aria-pressed="false" title="${long}: light them on the map"><div class="n">${n}</div><div class="t">${t}</div></button>`).join('')}</div>
-      ${needs()}
+      <div class="counts" id="counts">${shown.map(([k, n, t, cls, , long]) => `<button class="count ${cls}" data-k="${k}" aria-pressed="${k === cntSel}" title="${long}: list them here, light them on the map"><div class="n">${n}</div><div class="t">${t}</div></button>`).join('')}</div>
+      ${cntSel ? cntList(cntSel) : needs()}
       ${SW.length ? (() => { const left = SW.filter((x) => !x.gone), seen = left.filter((x) => x.seen).length, late = left.length - seen
         const head = [late ? `${late} overdue` : '', seen ? `${seen} look${seen === 1 ? 's' : ''} done` : ''].filter(Boolean).join(' · ')
         return left.length ? `<button class="sweepgo" id="sweepgo"><span><b>Sweep ${head}</b><span>about ${Math.max(1, Math.round(left.length * 5 / 60))} min, one at a time</span></span><kbd>S</kbd></button>` : '' })() : ''}`
@@ -989,22 +1018,29 @@
     const unpress = () => { wkEl.querySelectorAll('[aria-pressed]').forEach((x) => x.setAttribute('aria-pressed', 'false')); cntEl.querySelectorAll('[aria-pressed]').forEach((x) => x.setAttribute('aria-pressed', 'false')) }
     if (w) {
       const i = +w.dataset.i, was = wkSel === i
-      wkSel = was ? -1 : i; renderToday(); if (was) return lightOff()
+      cntSel = null; wkSel = was ? -1 : i; renderToday(); if (was) return lightOff()
       const due = wkDue(week[i])
       light(new Set([...wkMeets[i].flatMap((m) => m.nodes), ...due.flatMap((t) => nodesOfTask(t.id))]),
         `${WD[week[i].getDay()]}, ${wkMeets[i].length} call${wkMeets[i].length === 1 ? '' : 's'}, ${due.length} due`)
     }
     if (c) {
-      const was = c.getAttribute('aria-pressed') === 'true'
-      if (wkSel >= 0) { wkSel = -1; renderToday(); return c && $('counts').querySelector(`[data-k="${c.dataset.k}"]`).click() }
-      unpress(); if (was) return lightOff()
-      c.setAttribute('aria-pressed', 'true')
+      const was = cntSel === c.dataset.k
+      wkSel = -1
+      if (was) return lightOff()
+      // the list under the counts becomes this count's rows; the map lights whoever carries one
+      // (light first: it may close an open page, which clears the picked count)
       const k = COUNTS.find((x) => x[0] === c.dataset.k)
-      light(new Set(k[4]), k[5])
+      light(k[4].length ? new Set(k[4]) : null, k[4].length ? k[5] : '')
+      cntSel = k[0]; renderToday()
     }
+    if (e.target.closest('#cntback')) lightOff()
   })
   function light(set, label) { if (egoN) fly(null); lit = set; litLabel = label || ''; seen() }
-  function lightOff() { lit = null; litLabel = ''; document.querySelectorAll('#week [aria-pressed], #counts [aria-pressed]').forEach((x) => x.setAttribute('aria-pressed', 'false')) }
+  function lightOff() {
+    lit = null; litLabel = ''
+    if (cntSel) { cntSel = null; return renderToday() }
+    document.querySelectorAll('#week [aria-pressed], #counts [aria-pressed]').forEach((x) => x.setAttribute('aria-pressed', 'false'))
+  }
 
   // ---------- ledger changes go to Brain on the Mac as one link per kind of change, batched, so a
   // run of clicks is one write and one commit (brain://ledger)
@@ -1034,6 +1070,18 @@
   const pagesLeft = () => RV.wrote.filter((p) => !readPages.has(p.id)).length
   const svgKeep = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
   const svgDrop = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>'
+  // a ledger source cell, readable: markdown links become links (a Jira issue, a Slack thread out,
+  // a note in the repo read here), the rest stays text
+  const srcHtml = (src) => {
+    let out = '', at = 0
+    for (const m of (src || '').matchAll(/\[([^\]]+)\]\(([^)\s]+)\)/g)) {
+      out += esc(src.slice(at, m.index))
+      const href = /^https?:/.test(m[2]) ? m[2] : obs(m[2].replace(/^\.\.\//, ''))
+      out += `<a href="${esc(href)}">${esc(m[1])}</a>`
+      at = m.index + m[0].length
+    }
+    return out + esc((src || '').slice(at))
+  }
   function renderReview() {
     const groups = RV.groups.map((g) => ({ ...g, rows: g.rows.filter((r) => !reviewed.has(r.id)) })).filter((g) => g.rows.length)
     const pages = RV.wrote.filter((p) => !readPages.has(p.id))
@@ -1042,8 +1090,9 @@
     $('v-review').innerHTML = `<p class="lede">${nP ? `<b>${nP} promise${nP === 1 ? '' : 's'}</b> heard since yesterday, keep or drop each. ` : ''}${pages.length ? `<b>${pages.length} page${pages.length === 1 ? '' : 's'}</b> updated, tick the ones that read right.` : ''}</p>
       ${groups.map((g) => `<div class="grp box" data-g="${esc(g.key)}"><div class="ghead"><div class="src">${g.file || g.url ? `<a class="ttl" href="${g.url || obs(g.file)}" title="Open where Brain heard it">${esc(g.title)}</a>` : `<span class="ttl">${esc(g.title)}</span>`}
         <span class="gk">${g.file.startsWith('archive/meeting') ? 'Call' : g.url ? 'Slack' : 'Notes'} · ${fmt(D(g.rows[0].opened))} · ${g.rows.length}</span></div><button class="btn" data-keepall="${esc(g.key)}">Keep all</button></div>
-        ${g.rows.map((r) => `<div class="it" data-id="${r.id}"><span class="dot ${r.state}"></span><div class="w"><div class="what">${esc(r.what)}</div>
-          <div class="meta"><span>${who(r)}</span>${dueChip(r)}</div></div>
+        ${g.rows.map((r) => `<div class="it" data-id="${r.id}" tabindex="0" aria-expanded="false" title="Click for more"><span class="dot ${r.state}"></span><div class="w"><div class="what">${esc(r.what)}</div>
+          <div class="meta"><span>${who(r)}</span>${dueChip(r)}</div>
+          <div class="more">${r.desc ? `<div class="desc">${esc(r.desc)}</div>` : ''}${r.src ? `<div class="from"><b>Heard in</b> ${srcHtml(r.src)}</div>` : ''}<div class="open"><a href="${taskHref(r)}">Open the task</a> · ${r.id}</div></div></div>
           <div class="acts"><button class="ib keep" data-keep="${r.id}" title="Keep, it is right" aria-label="Keep: ${esc(r.what)}">${svgKeep}</button><button class="ib" data-drop="${r.id}" title="Not a promise" aria-label="Drop, not a promise: ${esc(r.what)}">${svgDrop}</button></div></div>`).join('')}</div>`).join('')}
       ${pages.length ? `<div class="sec"><h3>Pages</h3><span class="sub">newest first</span></div>
       <div class="box" id="pages">${pages.map((p) => `<div class="it" data-page="${p.id}"><div class="w">${byId[p.id] ? chip(byId[p.id]) : `<b>${esc(p.title)}</b>`}
@@ -1147,6 +1196,15 @@
       done(ids, 'keep'); gone(grp, () => { grp.remove(); after() })
     }
     if (rd) { readPages.add(rd.dataset.read); remember(); settle(rd.closest('.it')) }
+    // a click anywhere else on a row opens it: the whole text, its notes, where it was heard
+    if (!k && !d && !all && !rd && !e.target.closest('a, button')) {
+      const row = e.target.closest('.it[data-id]'); if (!row) return
+      const open = !row.classList.contains('open')
+      row.classList.toggle('open', open); row.setAttribute('aria-expanded', String(open))
+    }
+  })
+  $('v-review').addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.it[data-id]')) { e.preventDefault(); e.target.click() }
   })
 
   // ---------- a node, pushed over the tab: what it is now, its weeks as a line, what is owed,
@@ -1540,13 +1598,13 @@
     quickN = n
     if (!n) { qc.classList.remove('on'); setTimeout(() => { if (!quickN) qc.hidden = true }, 200); return }
     const list = [...(n.mine || []).map((r) => ({ r, you: true })), ...(n.theirs || []).map((r) => ({ r, you: false }))]
-      .sort((x, y) => ({ overdue: 0, due: 1, open: 2 })[x.r.state] - ({ overdue: 0, due: 1, open: 2 })[y.r.state] || (x.r.due || '9').localeCompare(y.r.due || '9'))
+      .sort((x, y) => ({ overdue: 0, due: 1, open: 2 })[x.r.state] - ({ overdue: 0, due: 1, open: 2 })[y.r.state] || (x.r.due || '9').localeCompare(y.r.due || '9') || (y.r.opened || '').localeCompare(x.r.opened || ''))
     const person = n.kind === 'person'
     const pic = n.photo ? `<span class="pic" style="background-image:url('${n.photo}')"></span>` : person ? `<span class="pic sil" style="--tint:${tintOf(n)}"></span>` : `<span class="pic thing" style="--tint:${tintOf(n)}">${esc(initials(n))}</span>`
     const nm = (s) => esc((s || '').split(/[ ,]/)[0])
-    qc.innerHTML = `<div class="qh">${pic}<div class="qn"><b>${esc(n.title)}</b><span>${KIND[n.kind]} · ${TIERNAME[n.tierNow ?? 2].toLowerCase()}${n.contact ? ` · spoke ${fmt(D(n.contact))}` : ''}</span></div>${n.overdue ? `<span class="od">${n.overdue} overdue</span>` : ''}<button class="x" aria-label="Close">×</button></div>
+    qc.innerHTML = `<div class="qh">${pic}<div class="qn"><b class="nt" title="Click to rename">${esc(n.title)}</b><button class="ren" aria-label="Rename" title="Rename"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button><span>${KIND[n.kind]} · ${TIERNAME[n.tierNow ?? 2].toLowerCase()}${n.contact ? ` · spoke ${fmt(D(n.contact))}` : ''}</span></div>${n.overdue ? `<span class="od">${n.overdue} overdue</span>` : ''}<button class="x" aria-label="Close">×</button></div>
       ${n.now ? `<div class="rl">${esc(roleOf(n))}</div>` : ''}
-      ${list.length ? `${list.some(({ r }) => !r.due) ? `<div class="qhint">${list.filter(({ r }) => !r.due).length} without a date · click a date to change it</div>` : ''}<ul>${list.map(({ r, you }) => `<li data-row="${r.id}"><div class="w"><span>${you ? `You owe ${nm(r.to)}` : `${nm(r.owes)} owes you`}</span>${dueChip(r)}</div>
+      ${list.length ? `${list.some(({ r }) => !r.due) ? `<div class="qhint">${list.filter(({ r }) => !r.due).length} without a date · click a date to change it</div>` : ''}<ul>${list.slice(0, 5).map(({ r, you }) => `<li data-row="${r.id}"><div class="w"><span>${you ? `You owe ${nm(r.to)}` : `${nm(r.owes)} owes you`}</span>${dueChip(r)}</div>
         <div class="tr"><a class="t" href="${taskHref(r)}" title="Open the task">${esc(r.what)}</a><button class="qd" data-qdone="${r.id}" aria-label="Done: ${esc(r.what)}" title="Done"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></div></li>`).join('')}</ul>${list.length > 5 ? `<div class="meta">+ ${list.length - 5} more when you explore</div>` : ''}` : '<div class="meta">Nothing owed either way</div>'}
       ${(n.meetings || []).length ? `<div class="meta">Last call: ${esc(n.meetings[0].title)} · ${fmt(D(n.meetings[0].date))}</div>` : ''}
       <div class="gos"><button class="ask2" data-ask="${esc('Where do things stand with ' + n.title + '?')}">Ask Brain about ${esc(n.label.split(' ')[0])}</button><button class="go">Explore around</button></div>`
@@ -1562,6 +1620,29 @@
     const x = Math.max(12, Math.min(stage.w - w - 12, right)), y = Math.max(12, Math.min(innerHeight - h - 12, sy - 40))
     qc.style.left = x + 'px'; qc.style.top = y + 'px'; qc.style.setProperty('--ox', quickSide > 0 ? 'left' : 'right')
   }
+  // ---------- a project's or a person's name, edited in place on the card: Enter keeps it, Esc
+  // cancels. Brain on the Mac changes the page's heading (brain://rename), the file name stays.
+  function renameStart() {
+    const n = quickN, b = qc.querySelector('.nt'); if (!n || !b || !n.file) return
+    const was = n.title
+    b.contentEditable = 'plaintext-only'; b.classList.add('editing'); b.focus()
+    const r = document.createRange(); r.selectNodeContents(b); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r)
+    let over = false
+    const end = (keep) => {
+      if (over) return; over = true
+      b.contentEditable = 'false'; b.classList.remove('editing'); b.removeEventListener('keydown', key); b.removeEventListener('blur', blur)
+      const t = b.textContent.replace(/\s+/g, ' ').trim()
+      if (!keep || !t || t === was) { b.textContent = was; return }
+      if (t.length > 140) { b.textContent = was; return toast('Too long, 140 characters at most') }
+      n.title = t; n.label = t.replace(/\s*\(.*?\)/, '')
+      const src = (B.nodes || []).find((x) => x.id === n.id); if (src) src.title = t
+      location.href = `brain://rename?file=${encodeURIComponent(n.file)}&title=${encodeURIComponent(t)}`
+      toast('Renamed, in your wiki'); quick(n)
+    }
+    const key = (e) => { if (e.key === 'Enter') { e.preventDefault(); end(true) } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); end(false) } }
+    const blur = () => end(true)
+    b.addEventListener('keydown', key); b.addEventListener('blur', blur)
+  }
   qc.addEventListener('click', (e) => {
     const d = e.target.closest('[data-qdone]')
     if (d && !d.classList.contains('on')) {
@@ -1569,6 +1650,7 @@
       const li = d.closest('li'); li.classList.add('gone'); setTimeout(() => { li.remove(); placeQuick() }, reduce ? 0 : 320); return
     }
     const a = e.target.closest('[data-ask]'); if (a) { if (CAN_ASK) { quick(null); convo.turns = []; homeAsk(a.dataset.ask) } else { location.href = 'brain://ask?q=' + encodeURIComponent(a.dataset.ask); toast('Asked Brain, the answer opens in the notch') } return }
+    if (e.target.closest('.ren') || (e.target.closest('.nt') && !e.target.closest('.nt').isContentEditable)) return renameStart()
     if (e.target.closest('.x')) return quick(null)
     if (e.target.closest('.go')) { const n = quickN; quick(null); fly(n) }
   })
@@ -1691,6 +1773,22 @@
     const h = a.getAttribute('href')
     if (!/^[a-z]+:/i.test(h) && !h.startsWith('#')) a.setAttribute('href', '#read:' + encodeURIComponent(h.startsWith('/') ? h.slice(1) : resolve(base, h)))
   })
+  // the names a task is about, as whole-word matchers: the pages it is linked to on the map, and
+  // whoever owes it or is owed it (not you, not a role like "client" or "team")
+  const ROLES = new Set(['client', 'clients', 'team', 'dev', 'devs', 'support', 'the', 'and', 'tech'])
+  function taskTerms(r) {
+    const out = new Set()
+    const add = (s) => { s = (s || '').replace(/\(.*?\)/g, '').replace(/\?/g, '').trim(); if (s.length > 2 && !isMe(s) && !ROLES.has(s.toLowerCase())) out.add(s.toLowerCase()) }
+    N.filter((n) => n.kind !== 'you' && n.kind !== 'topic' && [...(n.mine || []), ...(n.theirs || [])].some((x) => x.id === r.id)).forEach((n) => {
+      add(n.label); n.title.replace(/\(.*?\)/g, '').split(':')[0].split(' / ').forEach(add)
+      if (n.kind === 'person') add(n.title.split(' ')[0])
+    })
+    // "Jane Doe (Acme Studio, Keeps), Sam": the names, and what stands in brackets after them
+    for (const side of [r.owes, r.to]) (side || '').replace(/[()]/g, ',').split(/,|\/|&|\s(?:or|and|et|ou)\s/).forEach((p) => {
+      add(p); const w = p.trim().split(/\s+/); if (w.length > 1) add(w[0])
+    })
+    return [...out].map((s) => new RegExp('(?<![\\p{L}\\p{N}])' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*') + '(?![\\p{L}\\p{N}])', 'iu'))   // "Base Camp" is also written "Basecamp"
+  }
   async function showTask(v, rel) {
     const r = (B.tasks || {})[rel.slice(5)] || rowById(rel.slice(5)), md = v.querySelector('.md')
     if (!r) { md.innerHTML = `<div class="empty"><b>This task is closed or gone</b><a href="${obs('commitments.md')}">Open the ledger</a></div>`; return }
@@ -1707,7 +1805,19 @@
       let t = (await readFile(notes[0])).replace(/^---\n[\s\S]*?\n---\n/, '')
       if (reader.stack[reader.stack.length - 1] !== rel) return
       const box = md.querySelector('.tnote')
-      box.innerHTML = `<h2>From the note <a href="${obs(notes[0])}">${esc(notes[0].split('/').pop().replace(/\.md$/, ''))}</a></h2>` + marked.parse(t.replace(/^# .*\n/, ''), { gfm: true })
+      // a note that covers many things (an import, a weekly review): only the sections that name who
+      // or what this task is about. A note that is about it as a whole is shown whole.
+      const h1 = (t.match(/^# .*$/m) || [''])[0]
+      t = t.replace(/^# .*\n/, '')
+      const terms = taskTerms(r), names = (s) => terms.some((re) => re.test(s))
+      const parts = t.split(/^(?=## )/m), secs = parts.filter((p) => p.startsWith('## ')), hit = secs.filter(names)
+      let sub = ''
+      if (terms.length && secs.length > 1 && !names(h1) && hit.length * 2 < secs.length) {
+        t = hit.join('\n')
+        sub = hit.length ? `<p class="tmeta">${hit.length} of ${secs.length} sections, the ${hit.length === 1 ? 'one that names' : 'ones that name'} this task's people or project</p>`
+          : `<p class="empty">Nothing in this note names this task's people or project (${secs.length} sections). Open the note to read it all.</p>`
+      }
+      box.innerHTML = `<h2>From the note <a href="${obs(notes[0])}">${esc(notes[0].split('/').pop().replace(/\.md$/, ''))}</a></h2>` + sub + marked.parse(t, { gfm: true })
       linksIn(box, notes[0])
     } catch {}
   }

@@ -59,6 +59,13 @@ final class Everywhere: NSObject {
       let due = item("due").flatMap { $0.range(of: "^\\d{4}-\\d{2}-\\d{2}$", options: .regularExpression) != nil ? $0 : nil } ?? ""
       Everywhere.task(["id": id, "what": what, "owes": item("owes") ?? "", "to": item("to") ?? "", "due": due,
                        "desc": item("desc") ?? "", "links": item("links") ?? ""])
+    case "rename":
+      // a project's or a person's name, edited on Brain Home's card: the page's "# " heading changes,
+      // its file name stays, so no link breaks
+      guard let file = item("file"),
+            file.range(of: "^(wiki/[a-z0-9-]+\\.md|projects/[a-z0-9-]+/README\\.md)$", options: .regularExpression) != nil,
+            let title = item("title"), !title.isEmpty, title.count <= 140, !title.contains("\n") else { return }
+      Everywhere.rename(file, title)
     case "save", "note":
       if let text = item("text", "q", "note"), !text.isEmpty { Everywhere.save(text, from: "a link"); onSaved?() }
     case "fortune":
@@ -107,6 +114,14 @@ final class Everywhere: NSObject {
   static func task(_ fields: [String: String]) {
     var e: [String: String] = fields
     e["t"] = "add"; e["at"] = ISO8601DateFormatter().string(from: Date()); e["via"] = "Brain Home"
+    guard let data = try? JSONSerialization.data(withJSONObject: e), let line = String(data: data, encoding: .utf8) else { return }
+    added = true
+    inbox(line + "\n", count: 1)
+  }
+
+  /// a new name for a wiki or project page; the page reloads once it is applied
+  static func rename(_ file: String, _ title: String) {
+    let e = ["t": "rename", "file": file, "title": title, "at": ISO8601DateFormatter().string(from: Date()), "via": "Brain Home"]
     guard let data = try? JSONSerialization.data(withJSONObject: e), let line = String(data: data, encoding: .utf8) else { return }
     added = true
     inbox(line + "\n", count: 1)
